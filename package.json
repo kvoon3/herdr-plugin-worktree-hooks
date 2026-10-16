@@ -1,5 +1,5 @@
 {
-  "name": "herdr-plugin-worktree-setup",
+  "name": "herdr-plugin-worktree-hooks",
   "version": "0.1.0",
   "private": true,
   "description": "Herdr plugin: run herdr-worktree.yaml hooks on worktree create/open, with built-in dependency auto-install",

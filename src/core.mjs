@@ -16,7 +16,7 @@ export class ConfigError extends Error {
 }
 
 export function log(message) {
-  process.stderr.write(`[worktree-setup] ${message}\n`)
+  process.stderr.write(`[worktree-hooks] ${message}\n`)
 }
 
 // HERDR_PLUGIN_EVENT_JSON shape (verified on herdr 0.9.5):
@@ -113,7 +113,7 @@ export function loadConfig(file) {
 // --- run-once claims: atomic mkdir keyed by checkout path, survives restarts ---
 
 function stateDir(env) {
-  return env.HERDR_PLUGIN_STATE_DIR || path.join(tmpdir(), 'herdr-worktree-setup')
+  return env.HERDR_PLUGIN_STATE_DIR || path.join(tmpdir(), 'herdr-worktree-hooks')
 }
 
 function keyOf(p) {

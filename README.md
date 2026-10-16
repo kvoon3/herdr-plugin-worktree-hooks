@@ -1,4 +1,4 @@
-# herdr-plugin-worktree-setup
+# herdr-plugin-worktree-hooks
 
 Run a repo's `herdr-worktree.yaml` hooks when a [Herdr](https://herdr.dev)
 worktree workspace of that repo is **created** or **opened**. Repos without the
@@ -10,14 +10,14 @@ Needs Node ≥ 18 on Herdr's PATH.
 ## Install
 
 ```sh
-herdr plugin install kvoon3/herdr-plugin-worktree-setup
+herdr plugin install kvoon3/herdr-plugin-worktree-hooks
 ```
 
 or, for local development:
 
 ```sh
-git clone https://github.com/kvoon3/herdr-plugin-worktree-setup
-herdr plugin link ./herdr-plugin-worktree-setup
+git clone https://github.com/kvoon3/herdr-plugin-worktree-hooks
+herdr plugin link ./herdr-plugin-worktree-hooks
 ```
 
 ## Config
@@ -65,7 +65,7 @@ configs still work and branches can vary their hooks.
 ## Debug
 
 ```sh
-herdr plugin log list --plugin kvoon.worktree-setup
+herdr plugin log list --plugin kvoon.worktree-hooks
 ```
 
 ## Development
