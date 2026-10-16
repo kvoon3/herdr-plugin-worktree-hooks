@@ -3,7 +3,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { parseYaml } from './yaml.mjs'
@@ -20,7 +20,9 @@ export function log(message) {
 }
 
 // HERDR_PLUGIN_EVENT_JSON shape (verified on herdr 0.9.5):
-// { event: "worktree_created", data: { type, workspace: { worktree: { repo_root, ... } }, worktree: { path, branch, ... } } }
+// { event: "worktree_removed", data: { type, workspace: { worktree: { repo_root, ... } }, worktree: { path, branch, ... } } }
+// On worktree.removed the checkout is already deleted and data.workspace is
+// optional (the workspace may be gone), so repo_root can be missing there.
 export function eventFacts(env) {
   let payload = {}
   try {
@@ -83,9 +85,9 @@ function rejectUnknownKeys(obj, allowed, where, source) {
   }
 }
 
-// Schema: { autoInstall?: boolean, hooks?: { created?: string[], opened?: string[] } }
+// Schema: { autoInstall?: boolean, hooks?: { created?: string[], opened?: string[], removed?: string[] } }
 export function validateWorktreeConfig(parsed, source) {
-  if (parsed == null) return { autoInstall: false, hooks: { created: [], opened: [] } }
+  if (parsed == null) return { autoInstall: false, hooks: { created: [], opened: [], removed: [] } }
   if (typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new ConfigError(`${source}: root must be a mapping`)
   }
@@ -93,14 +95,15 @@ export function validateWorktreeConfig(parsed, source) {
   const { autoInstall = false, hooks = {} } = parsed
   if (typeof autoInstall !== 'boolean') throw new ConfigError(`${source}: autoInstall must be true or false`)
   if (typeof hooks !== 'object' || hooks == null || Array.isArray(hooks)) {
-    throw new ConfigError(`${source}: hooks must be a mapping with created/opened lists`)
+    throw new ConfigError(`${source}: hooks must be a mapping with created/opened/removed lists`)
   }
-  rejectUnknownKeys(hooks, ['created', 'opened'], 'hooks', source)
+  rejectUnknownKeys(hooks, ['created', 'opened', 'removed'], 'hooks', source)
   return {
     autoInstall,
     hooks: {
       created: commandList(hooks.created, 'created', source),
       opened: commandList(hooks.opened, 'opened', source),
+      removed: commandList(hooks.removed, 'removed', source),
     },
   }
 }
@@ -134,6 +137,38 @@ export function claim(env, checkoutPath) {
 
 export function release(env, checkoutPath) {
   rmSync(path.join(stateDir(env), 'claims', keyOf(checkoutPath)), { recursive: true, force: true })
+}
+
+// --- main-checkout memory: created/opened resolve $MAIN while the checkout
+// exists; by the time worktree.removed fires the checkout is deleted and the
+// payload's workspace block may be gone, so remember the answer and read it
+// back at removal time.
+
+function mainsDir(env) {
+  return path.join(stateDir(env), 'mains')
+}
+
+export function rememberMain(env, checkoutPath, mainPath) {
+  if (!mainPath) return
+  try {
+    mkdirSync(mainsDir(env), { recursive: true })
+    writeFileSync(path.join(mainsDir(env), keyOf(checkoutPath)), path.resolve(mainPath), 'utf8')
+  } catch (e) {
+    log(`could not remember main checkout for ${checkoutPath}: ${e.message}`)
+  }
+}
+
+export function recallMain(env, checkoutPath) {
+  try {
+    const main = readFileSync(path.join(mainsDir(env), keyOf(checkoutPath)), 'utf8').trim()
+    return main && existsSync(main) ? main : null
+  } catch {
+    return null
+  }
+}
+
+export function forgetMain(env, checkoutPath) {
+  rmSync(path.join(mainsDir(env), keyOf(checkoutPath)), { force: true })
 }
 
 // Run commands sequentially in a shell; stop at the first failure.

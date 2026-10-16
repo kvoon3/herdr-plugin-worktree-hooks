@@ -12,6 +12,8 @@ hooks:
     - cp "$MAIN/.env" .env   # trailing comment
   opened:
     - echo 'it''s open'
+  removed:
+    - docker compose -p "$REPO_NAME-$BRANCH" down
 `
 
 test('parses sample config with comments, quotes, and booleans', () => {
@@ -19,22 +21,27 @@ test('parses sample config with comments, quotes, and booleans', () => {
   assert.equal(cfg.autoInstall, false)
   assert.deepEqual(cfg.hooks.created, ['vp install', 'cp "$MAIN/.env" .env'])
   assert.deepEqual(cfg.hooks.opened, ["echo 'it''s open'"])
+  assert.deepEqual(cfg.hooks.removed, ['docker compose -p "$REPO_NAME-$BRANCH" down'])
 })
 
 test('empty config means no hooks and no auto-install', () => {
   assert.deepEqual(validateWorktreeConfig(parseYaml(''), 'c'), {
     autoInstall: false,
-    hooks: { created: [], opened: [] },
+    hooks: { created: [], opened: [], removed: [] },
   })
   assert.deepEqual(validateWorktreeConfig(null, 'c'), {
     autoInstall: false,
-    hooks: { created: [], opened: [] },
+    hooks: { created: [], opened: [], removed: [] },
   })
 })
 
 test('typo in keys is rejected with allowed keys named', () => {
   assert.throws(() => validateWorktreeConfig(parseYaml('hook:\n  created:\n    - x\n'), 'c'), /unknown config key/)
   assert.throws(() => validateWorktreeConfig(parseYaml('hooks:\n  creatd:\n    - x\n'), 'c'), /unknown hooks key/)
+  assert.throws(
+    () => validateWorktreeConfig(parseYaml('hooks:\n  removd:\n    - x\n'), 'c'),
+    /unknown hooks key.*created, opened, removed/,
+  )
 })
 
 test('non-string commands are rejected', () => {

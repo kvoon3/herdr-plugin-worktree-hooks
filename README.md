@@ -1,11 +1,10 @@
 # herdr-plugin-worktree-hooks
 
 Run a repo's `herdr-worktree.yaml` hooks when a [Herdr](https://herdr.dev)
-worktree workspace of that repo is **created** or **opened**. Repos without the
-config fall back to auto-installing JS dependencies. Zero dependencies (plain
-Node ESM), so `herdr plugin install` works with no build step.
+worktree workspace of that repo is **created**, **opened**, or **removed**.
+Repos without the config fall back to auto-installing JS dependencies.
 
-Needs Node ≥ 18 on Herdr's PATH.
+Zero dependencies (plain Node ESM). Needs Node ≥ 18 on Herdr's PATH.
 
 ## Install
 
@@ -13,12 +12,7 @@ Needs Node ≥ 18 on Herdr's PATH.
 herdr plugin install kvoon3/herdr-plugin-worktree-hooks
 ```
 
-or, for local development:
-
-```sh
-git clone https://github.com/kvoon3/herdr-plugin-worktree-hooks
-herdr plugin link ./herdr-plugin-worktree-hooks
-```
+Local development: `herdr plugin link ./herdr-plugin-worktree-hooks`.
 
 ## Config
 
@@ -30,37 +24,35 @@ hooks:
   created:                # once per new worktree, inside the worktree
     - vp install
     - cp "$MAIN/.env" .env
-  opened:                 # every time the workspace is opened; keep idempotent
+  opened:                 # every open; keep idempotent
     - echo ready
+  removed:                # after the checkout is deleted; runs inside $MAIN
+    - docker compose -p "$REPO_NAME-$BRANCH" down
 ```
 
-Hook commands run sequentially in a shell inside the worktree and stop at the
-first failure. Available environment:
+Commands run sequentially in a shell and stop at the first failure.
 
-| Variable       | Value                                   |
-| -------------- | --------------------------------------- |
-| `$WORKTREE`    | the worktree checkout                   |
-| `$MAIN`        | the repo's main checkout                |
-| `$REPO_NAME`   | repository name                         |
-| `$BRANCH`      | worktree branch                         |
-| `$EVENT`       | `created`, `opened`, or `install`       |
-| `$HOOKS_CONFIG`| path of the matched config file         |
-
-The worktree's own config wins over the main checkout's, so uncommitted
-configs still work and branches can vary their hooks.
+| Variable        | Value                                        |
+| -------------- | -------------------------------------------- |
+| `$WORKTREE`    | the worktree checkout                        |
+| `$MAIN`        | the repo's main checkout                     |
+| `$REPO_NAME`   | repository name                              |
+| `$BRANCH`      | worktree branch                              |
+| `$EVENT`       | `created`, `opened`, `removed`, or `install` |
+| `$HOOKS_CONFIG`| matched config file path                     |
 
 ## Semantics
 
-- `created` runs **once per checkout**: an atomic claim in the plugin state dir
-  dedupes repeat deliveries and survives restarts. A failed run releases the
-  claim so the next event retries. `worktree.removed` releases the claim, so
-  deleting and re-creating the same branch runs the hooks again.
-- `opened` runs on every open — the config author owns idempotency.
-- Config errors (unknown keys, bad indentation, flow syntax) are logged with a
-  line number and nothing runs.
-- Built-in auto-install (no config, or `autoInstall: true`): vite-plus projects
-  install via `vp install`, otherwise the toolchain is picked from the lockfile
-  (`pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, `package-lock.json`).
+- The worktree's own config wins over the main checkout's, so uncommitted
+  configs and per-branch hooks work.
+- `created` runs once per checkout; a failed run retries on the next event,
+  and delete + re-create runs it again.
+- `opened` and `removed` run every time — keep them idempotent.
+- `removed` runs in `$MAIN` with `$WORKTREE` pointing at the deleted path.
+- Config errors are logged with a line number; nothing runs.
+- Without a config (or with `autoInstall: true`), JS dependencies are
+  installed by lockfile: `vp install` for vite-plus projects, otherwise
+  `pnpm` / `yarn` / `bun` / `npm`.
 
 ## Debug
 
@@ -71,13 +63,7 @@ herdr plugin log list --plugin kvoon.worktree-hooks
 ## Development
 
 ```sh
-node --test test/config.test.mjs
+node --test
 ```
 
-Tested against Herdr 0.9.5 (event payload shape verified against the Herdr
-source). `worktree.removed` hooks — running cleanup commands on removal — are
-not implemented yet; removal currently only releases the claim.
-
-## License
-
-[MIT](./LICENSE)
+Tested against Herdr 0.9.5. [MIT](./LICENSE)

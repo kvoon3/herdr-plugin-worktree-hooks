@@ -11,9 +11,12 @@ import {
   claim,
   eventFacts,
   findConfig,
+  forgetMain,
   loadConfig,
   log,
   mainCheckoutOf,
+  recallMain,
+  rememberMain,
   release,
   runCommands,
 } from '../src/core.mjs'
@@ -32,8 +35,8 @@ function hookExtra(facts, main, configFile, name) {
   }
 }
 
-function resolveContext(facts) {
-  const main = mainCheckoutOf(facts.worktreePath, facts.repoRoot)
+function resolveContext(env, facts, { fallbackToRemembered = false } = {}) {
+  const main = mainCheckoutOf(facts.worktreePath, facts.repoRoot) ?? (fallbackToRemembered ? recallMain(env, facts.worktreePath) : null)
   const configFile = findConfig(facts.worktreePath, main)
   return { main, configFile }
 }
@@ -47,7 +50,8 @@ function handleCreated() {
     return log(`created: already handled, skipping ${facts.worktreePath}`)
   }
 
-  const { main, configFile } = resolveContext(facts)
+  const { main, configFile } = resolveContext(env, facts)
+  rememberMain(env, facts.worktreePath, main)
   if (!configFile) {
     log(`no herdr-worktree.yaml in ${facts.worktreePath}${main ? ` or ${main}` : ''}, using built-in auto-install`)
     if (!autoInstall(facts.worktreePath)) release(env, facts.worktreePath)
@@ -82,7 +86,8 @@ function handleOpened() {
   const facts = eventFacts(env)
   if (!facts.worktreePath) return log('opened: no worktree path in payload')
 
-  const { main, configFile } = resolveContext(facts)
+  const { main, configFile } = resolveContext(env, facts)
+  rememberMain(env, facts.worktreePath, main)
   if (!configFile) {
     log(`no herdr-worktree.yaml in ${facts.worktreePath}${main ? ` or ${main}` : ''}, checking built-in auto-install`)
     autoInstall(facts.worktreePath)
@@ -110,8 +115,41 @@ function handleOpened() {
 function handleRemoved() {
   const facts = eventFacts(env)
   if (!facts.worktreePath) return log('removed: no worktree path in payload')
+
+  // Release first so a same-path re-create racing these hooks can claim freely.
   release(env, facts.worktreePath)
-  log(`released claim for ${facts.worktreePath}`)
+
+  // The checkout is already deleted; resolve $MAIN from the payload, else from
+  // what created/opened remembered.
+  const { main, configFile } = resolveContext(env, facts, { fallbackToRemembered: true })
+  forgetMain(env, facts.worktreePath)
+  if (!main) {
+    return log(`removed: cannot resolve main checkout for ${facts.worktreePath}, skipping removed hooks`)
+  }
+  if (!existsSync(main)) {
+    return log(`removed: main checkout ${main} is gone, skipping removed hooks`)
+  }
+  if (!configFile) {
+    return log(`removed: no herdr-worktree.yaml in ${main}, nothing to run`)
+  }
+
+  log(`config: ${configFile}`)
+  let config
+  try {
+    config = loadConfig(configFile)
+  } catch (e) {
+    return log(`config error: ${e.message}`)
+  }
+  if (!config.hooks.removed.length) return log('no removed hooks configured, nothing to run')
+
+  runCommands(config.hooks.removed, {
+    cwd: main,
+    extra: {
+      ...hookExtra(facts, main, configFile, 'removed'),
+      REPO_NAME: facts.repoName ?? path.basename(main),
+    },
+    log,
+  })
 }
 
 try {
