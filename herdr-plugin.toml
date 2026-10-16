@@ -1,0 +1,20 @@
+id = "kvoon.worktree-setup"
+name = "Worktree Setup"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Run herdr-worktree.yaml hooks when a worktree workspace is created or opened; projects without the config fall back to auto-installing JS dependencies"
+platforms = ["macos", "linux"]
+
+[[events]]
+on = "worktree.created"
+command = ["node", "bin/event.mjs"]
+
+[[events]]
+on = "worktree.opened"
+command = ["node", "bin/event.mjs"]
+
+# Release the created-claim so deleting and re-creating the same branch runs the
+# hooks again.
+[[events]]
+on = "worktree.removed"
+command = ["node", "bin/event.mjs"]
