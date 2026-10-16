@@ -1,5 +1,5 @@
 id = "kvoon.worktree-hooks"
-name = "Worktree Setup"
+name = "Worktree Hooks"
 version = "0.1.0"
 min_herdr_version = "0.9.0"
 description = "Run herdr-worktree.yaml hooks when a worktree workspace is created or opened; projects without the config fall back to auto-installing JS dependencies"
